@@ -29,6 +29,14 @@ class Config(BaseModel):
 
 
 def main():
+
+    print("Initializing MinIO server...")
+    print(f"MinIO address: {minio_address}")
+    print(f"Root user: {root_user}")
+    print(f"Root password: {root_password}")
+    print(f"Alias: {alias}")
+
+
     with open("./config.yaml", "r") as f:
         x = yaml.safe_load(f)
         config = Config(**x)
