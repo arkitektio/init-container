@@ -25,4 +25,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: jhnnsrs/init:nightly
+          tags: jhnnsrs/init:dev
