@@ -2,8 +2,10 @@ FROM python:3.11
 
 WORKDIR /workspace
 
-RUN wget https://dl.min.io/client/mc/release/linux-amd64/mc
-RUN chmod +x mc
+ARG TARGETARCH
+RUN curl -fsSL https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mc \
+      -o /workspace/mc \
+ && chmod +x /workspace/mc
 
 RUN pip install pydantic pyyaml
 
