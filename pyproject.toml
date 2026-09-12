@@ -1,0 +1,39 @@
+# This repo is not a Python project -- it builds a Docker image from the
+# Dockerfile beside this file. The only reason pyproject.toml exists here is that
+# python-semantic-release reads its configuration from it, and semantic-release
+# is what decides the version, tags the commit and drives the image tags.
+#
+# Releases are tag-only: the workflow passes `commit: false` / `changelog: false`,
+# so semantic-release never writes back to the branch. The git tag is the sole
+# version source -- there is deliberately no `version` field and no
+# `version_toml` here, and the docker job reads `steps.release.outputs.tag`.
+[tool.semantic_release]
+build_command = ""
+
+# main -> stable X.Y.Z releases. next -> prereleases X.Y.Z-rc.N.
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.branches.next]
+match = "next"
+prerelease = true
+prerelease_token = "rc"
+
+# Maintenance branches (1.x, 2.x, ...) cut stable patch/minor releases for an
+# older major after a new major has shipped from main.
+[tool.semantic_release.branches.maintenance]
+match = '^\d+\.x$'
+prerelease = false
+
+# Keep the release notes focused on user-facing changes. These patterns only
+# filter what is rendered -- they do not affect version bumps.
+[tool.semantic_release.changelog]
+exclude_commit_patterns = [
+    '^chore(?:\([^)]*\))?: ',
+    '^ci(?:\([^)]*\))?: ',
+    '^build(?:\([^)]*\))?: ',
+    '^style(?:\([^)]*\))?: ',
+    '^test(?:\([^)]*\))?: ',
+    '^Merge ',
+]

@@ -1,0 +1,11 @@
+# Exact versions, transitive included, so that two builds of the same commit install the
+# same code. The Dockerfile used to say `pip install pydantic pyyaml`, which resolved to
+# whatever PyPI served that day — an image with no version in any meaningful sense.
+#
+# Bump deliberately; PyPI versions are immutable, so a pin here is a pin.
+pydantic==2.13.5
+pydantic-core==2.46.5
+annotated-types==0.8.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+PyYAML==6.0.3
