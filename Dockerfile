@@ -9,32 +9,35 @@ WORKDIR /workspace
 ARG VERSION="0.0.0"
 
 LABEL org.opencontainers.image.title="init" \
-      org.opencontainers.image.description="Creates the buckets an Arkitekt deployment expects, then exits" \
+      org.opencontainers.image.description="Creates the buckets and users an Arkitekt deployment expects in RustFS, then exits" \
       org.opencontainers.image.source="https://github.com/arkitektio/init-container" \
       org.opencontainers.image.version="${VERSION}"
 
-# The MinIO client, by release rather than by the moving `mc` symlink, and checked against
-# the checksum MinIO publishes beside it. Everything this container does, it does through
-# `mc`, so an unverified download of it is the whole trust boundary.
+# The RustFS client (`rc`), by release and checked against the checksum RustFS
+# publishes beside it. Everything this container does, it does through `rc`, so an
+# unverified download of it is the whole trust boundary.
+#
+# This replaced MinIO's `mc`: the storage backend is RustFS now, and `mc`'s admin
+# commands (user add, policy attach) speak MinIO's own admin API, which RustFS does
+# not serve compatibly. `rc` is the RustFS equivalent and takes the same argument
+# shapes, so init.py reads almost identically.
 ARG TARGETARCH
-ARG MC_RELEASE="RELEASE.2025-08-13T08-35-41Z"
-ARG MC_SHA256_amd64="01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891"
-ARG MC_SHA256_arm64="14c8c9616cfce4636add161304353244e8de383b2e2752c0e9dad01d4c27c12c"
-# Fetched from GitHub releases, not dl.min.io: MinIO took that host down and every
-# path under it now answers 410, the pinned version included. The two SHA256 pins
-# below are unchanged and still verify -- the GitHub asset is the same artifact,
-# byte for byte -- so the trust boundary described above is intact.
-# curl is only needed to fetch the mc client; ca-certificates stays for TLS.
+ARG RC_VERSION="v0.1.35"
+ARG RC_SHA256_amd64="f852392837e2b56c4785ea7f4e4a0e3f58a5df19fe317eb80bcc1bfaa41a2893"
+ARG RC_SHA256_arm64="3d8e125f878f295dedeb40a03a85c311588205601f5076fbc8b341fe40b41b1b"
+# curl is only needed to fetch the rc client; ca-certificates stays for TLS.
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
- && curl -fsSL "https://github.com/minio/mc/releases/download/${MC_RELEASE}/mc.linux-${TARGETARCH}.${MC_RELEASE}" \
-      -o /workspace/mc \
+ && curl -fsSL "https://github.com/rustfs/cli/releases/download/${RC_VERSION}/rustfs-cli-linux-${TARGETARCH}-${RC_VERSION}.tar.gz" \
+      -o /tmp/rc.tar.gz \
  && case "${TARGETARCH}" in \
-      amd64) expected="${MC_SHA256_amd64}" ;; \
-      arm64) expected="${MC_SHA256_arm64}" ;; \
-      *) echo "no mc checksum recorded for ${TARGETARCH}" >&2; exit 1 ;; \
+      amd64) expected="${RC_SHA256_amd64}" ;; \
+      arm64) expected="${RC_SHA256_arm64}" ;; \
+      *) echo "no rc checksum recorded for ${TARGETARCH}" >&2; exit 1 ;; \
     esac \
- && echo "${expected}  /workspace/mc" | sha256sum -c - \
- && chmod +x /workspace/mc \
+ && echo "${expected}  /tmp/rc.tar.gz" | sha256sum -c - \
+ && tar -xzf /tmp/rc.tar.gz -C /workspace rc \
+ && rm /tmp/rc.tar.gz \
+ && chmod +x /workspace/rc \
  && apt-get purge -y --auto-remove curl \
  && rm -rf /var/lib/apt/lists/*
 

@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("init")
 
-MC = "./mc"
+RC = "./rc"
 ALIAS = "local"
 CONFIG_PATH = os.getenv("CONFIG_PATH", "./config.yaml")
 
@@ -51,8 +51,8 @@ def mask(secret: str) -> str:
     return secret[:2] + "*" * (len(secret) - 2)
 
 
-def run_mc(*args: str, redact: int = -1) -> subprocess.CompletedProcess:
-    """Run an `mc` subcommand, logging the (optionally redacted) command and its
+def run_rc(*args: str, redact: int = -1) -> subprocess.CompletedProcess:
+    """Run an `rc` subcommand, logging the (optionally redacted) command and its
     output, and raising on a non-zero exit.
 
     `redact` is the index into `args` of an argument to mask in logs (e.g. a
@@ -61,10 +61,10 @@ def run_mc(*args: str, redact: int = -1) -> subprocess.CompletedProcess:
     shown = list(args)
     if 0 <= redact < len(shown):
         shown[redact] = mask(shown[redact])
-    logger.info("Running: %s %s", MC, " ".join(shown))
+    logger.info("Running: %s %s", RC, " ".join(shown))
 
     result = subprocess.run(
-        [MC, *args],
+        [RC, *args],
         capture_output=True,
         text=True,
     )
@@ -74,7 +74,7 @@ def run_mc(*args: str, redact: int = -1) -> subprocess.CompletedProcess:
         logger.error(
             "Command failed (exit %s): %s %s",
             result.returncode,
-            MC,
+            RC,
             " ".join(shown),
         )
         if result.stdout.strip():
@@ -88,16 +88,16 @@ def run_mc(*args: str, redact: int = -1) -> subprocess.CompletedProcess:
 def check_environment() -> Credentials:
     """Read required configuration from the environment, failing fast with a
     clear message if anything is missing."""
-    address = os.getenv("MINIO_HOST")
-    user = os.getenv("MINIO_ROOT_USER")
-    password = os.getenv("MINIO_ROOT_PASSWORD")
+    address = os.getenv("RUSTFS_HOST")
+    user = os.getenv("RUSTFS_ACCESS_KEY")
+    password = os.getenv("RUSTFS_SECRET_KEY")
 
     missing = [
         name
         for name, value in (
-            ("MINIO_HOST", address),
-            ("MINIO_ROOT_USER", user),
-            ("MINIO_ROOT_PASSWORD", password),
+            ("RUSTFS_HOST", address),
+            ("RUSTFS_ACCESS_KEY", user),
+            ("RUSTFS_SECRET_KEY", password),
         )
         if not value
     ]
@@ -112,24 +112,24 @@ def check_environment() -> Credentials:
 def log_diagnostics(creds: Credentials) -> None:
     """Log host/binary details that make arch-mismatch bugs obvious."""
     logger.info("Host platform: %s %s", platform.system(), platform.machine())
-    logger.info("MinIO address: %s", creds.address)
-    logger.info("Root user: %s", creds.user)
-    logger.info("Root password: %s", mask(creds.password))
+    logger.info("RustFS address: %s", creds.address)
+    logger.info("Access key: %s", creds.user)
+    logger.info("Secret key: %s", mask(creds.password))
     logger.info("Config path: %s", CONFIG_PATH)
     try:
         version = subprocess.run(
-            [MC, "--version"], capture_output=True, text=True, check=True
+            [RC, "--version"], capture_output=True, text=True, check=True
         )
-        logger.info("mc binary: %s", version.stdout.strip().splitlines()[0])
+        logger.info("rc binary: %s", version.stdout.strip().splitlines()[0])
     except FileNotFoundError:
-        logger.error("mc binary not found at %s", MC)
+        logger.error("rc binary not found at %s", RC)
         sys.exit(1)
     except subprocess.CalledProcessError as exc:
         # An arch-mismatched binary ("exec format error") surfaces right here
         # instead of silently no-op'ing later.
-        logger.error("Failed to execute mc binary: %s", exc)
+        logger.error("Failed to execute rc binary: %s", exc)
         logger.error(
-            "This usually means the bundled mc is built for the wrong "
+            "This usually means the bundled rc is built for the wrong "
             "architecture (host is %s).",
             platform.machine(),
         )
@@ -137,7 +137,7 @@ def log_diagnostics(creds: Credentials) -> None:
 
 
 def main() -> None:
-    logger.info("Initializing MinIO server...")
+    logger.info("Initializing RustFS server...")
     creds = check_environment()
     log_diagnostics(creds)
 
@@ -150,20 +150,20 @@ def main() -> None:
         len(config.users),
     )
 
-    run_mc("alias", "set", ALIAS, creds.address, creds.user, creds.password, redact=5)
+    run_rc("alias", "set", ALIAS, creds.address, creds.user, creds.password, redact=5)
 
     for bucket in config.buckets:
         logger.info("Ensuring bucket: %s", bucket.name)
-        run_mc("mb", "--ignore-existing", f"{ALIAS}/{bucket.name}")
+        run_rc("bucket", "create", "-p", f"{ALIAS}/{bucket.name}")
 
     for user in config.users:
         logger.info("Creating user: %s (access key: %s)", user.name, user.access_key)
-        run_mc(
+        run_rc(
             "admin", "user", "add", ALIAS, user.access_key, user.secret_key, redact=5
         )
         for policy in user.policies:
             logger.info("Attaching policy %s to user %s", policy, user.access_key)
-            run_mc(
+            run_rc(
                 "admin",
                 "policy",
                 "attach",
@@ -173,16 +173,16 @@ def main() -> None:
                 user.access_key,
             )
 
-    logger.info("MinIO initialization complete.")
+    logger.info("RustFS initialization complete.")
 
 
 if __name__ == "__main__":
     try:
         main()
     except subprocess.CalledProcessError as exc:
-        # Already logged with full output by run_mc; exit non-zero without
+        # Already logged with full output by run_rc; exit non-zero without
         # dumping a traceback (its args repr would expose secrets).
-        logger.error("Aborting: mc command exited with status %s", exc.returncode)
+        logger.error("Aborting: rc command exited with status %s", exc.returncode)
         sys.exit(1)
     except Exception as exc:  # noqa: BLE001 - top-level guard for a clean exit
         logger.exception("Aborting: unexpected error during initialization: %s", exc)
